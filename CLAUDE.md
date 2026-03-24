@@ -21,11 +21,11 @@ environment for testing `ezpodman` — a lazydocker wrapper for Podman.
 
 Installation instructions for ezpodman are in the ezpodman repo itself.
 
-### Instructions to install ezpodman from local forgejo repo
+### Instructions to install ezpodman from GitHub
 
 ```bash
 mkdir -p ~/.local/bin
-curl -fsSL curl -fsSL https://forgejo.home.lan/alfon/ezpodman/raw/branch/main/ezpodman -o ~/.local/bin/ezpodman
+curl -fsSL https://raw.githubusercontent.com/alfonsosanchez12/ezpodman/main/ezpodman -o ~/.local/bin/ezpodman
 chmod +x ~/.local/bin/ezpodman
 ```
 
@@ -153,7 +153,7 @@ Done once before running any playbook:
 
 ## Known Risk
 
-The `community.general.incus` connection plugin support for named remotes
-(`ansible_incus_remote`) targeting non-local Incus servers needs validation.
-If unsupported, fallback is Badger as SSH jump host for `provision.yml`/`nuke.yml`.
-Flag this early and suggest a test command.
+The `community.general.incus` connection plugin fully supports `ansible_incus_remote`
+for named remotes. The plugin constructs `incus exec <remote>:<instance> --project <project>`.
+No SSH fallback needed. Validate connectivity before first run with:
+  `incus project list badger:`

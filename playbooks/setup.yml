@@ -1,0 +1,120 @@
+---
+# playbooks/setup.yml
+#
+# PURPOSE: Install and configure all software on ezpodman-local and podman-remote.
+#          Run this after provision.yml has both VMs booted and ready.
+#
+# USAGE:
+#   ansible-playbook -i inventory/hosts.ini playbooks/setup.yml
+#   ansible-playbook -i inventory/hosts.ini playbooks/setup.yml -e "incus_remote=falcon"
+#
+# WHAT HAPPENS:
+#   Play 1 (all VMs):
+#     - Creates the sandbox user for rootless Podman
+#     - Installs Podman (dnf on Fedora, apt on Debian)
+#     - Configures rootless Podman (subuid/subgid, lingering)
+#     - On podman-remote only: enables the podman.socket systemd user unit
+#       so ezpodman-local can reach the Podman API over SSH
+#
+#   Play 2 (ezpodman-local only):
+#     - Installs the full toolchain: git, go, jq, fzf, curl, podman-docker,
+#       lazydocker, ezpodman
+#
+# NEXT STEP after this completes:
+#   ansible-playbook -i inventory/hosts.ini playbooks/containers_up.yml
+
+# ── Play 1: Common setup (both VMs) ──────────────────────────────────────────
+
+- name: Common setup — Podman + rootless config
+  hosts: all
+  gather_facts: true   # needed: ansible_os_family, ansible_architecture
+
+  roles:
+    - role: podman_setup
+
+# ── Play 2: ezpodman-local toolchain (Fedora only) ───────────────────────────
+
+- name: Toolchain setup — ezpodman-local
+  hosts: local
+  gather_facts: true
+
+  # sandbox_user is defined in roles/podman_setup/defaults/main.yml
+  # and carries forward here so install paths are consistent.
+  vars_files:
+    - "{{ playbook_dir }}/../roles/podman_setup/defaults/main.yml"
+
+  tasks:
+
+    # ── System packages ──────────────────────────────────────────────────────
+
+    - name: Install base toolchain packages (dnf)
+      ansible.builtin.dnf:
+        name:
+          - git
+          - golang
+          - jq
+          - fzf
+          - curl
+          # podman-docker provides a 'docker' CLI shim that redirects to Podman.
+          # This lets tools that call 'docker' work without a Docker daemon.
+          - podman-docker
+        state: present
+
+    # ── lazydocker ───────────────────────────────────────────────────────────
+
+    # lazydocker is distributed as a pre-built binary — not in dnf.
+    # We download the release tarball, extract the binary, and place it in
+    # ~/.local/bin for the sandbox user (rootless, no system-wide install).
+    #
+    # The URL embeds the version and architecture. ansible_architecture
+    # returns 'x86_64' or 'aarch64'; lazydocker releases use the same names.
+    - name: Set lazydocker download URL
+      ansible.builtin.set_fact:
+        lazydocker_url: >-
+          https://github.com/jesseduffield/lazydocker/releases/latest/download/lazydocker_Linux_{{ ansible_architecture }}.tar.gz
+
+    - name: Create ~/.local/bin for {{ sandbox_user }}
+      ansible.builtin.file:
+        path: /home/{{ sandbox_user }}/.local/bin
+        state: directory
+        owner: "{{ sandbox_user }}"
+        group: "{{ sandbox_user }}"
+        mode: "0755"
+
+    - name: Download and extract lazydocker
+      ansible.builtin.unarchive:
+        src: "{{ lazydocker_url }}"
+        dest: /home/{{ sandbox_user }}/.local/bin
+        include:
+          - lazydocker          # only extract the binary, skip LICENSE/README
+        remote_src: true        # fetch the URL on the remote VM, not the Mac
+        owner: "{{ sandbox_user }}"
+        group: "{{ sandbox_user }}"
+        mode: "0755"
+        creates: /home/{{ sandbox_user }}/.local/bin/lazydocker  # skip if already present
+
+    # ── ezpodman ─────────────────────────────────────────────────────────────
+
+    # ezpodman is a single shell script fetched from GitHub.
+    # Using GitHub (not the local Forgejo mirror) avoids the Step-CA TLS
+    # prerequisite and works on any fresh VM without extra trust setup.
+    - name: Download ezpodman from GitHub
+      ansible.builtin.get_url:
+        url: https://raw.githubusercontent.com/alfonsosanchez12/ezpodman/main/ezpodman
+        dest: /home/{{ sandbox_user }}/.local/bin/ezpodman
+        mode: "0755"
+        owner: "{{ sandbox_user }}"
+        group: "{{ sandbox_user }}"
+
+    # ── PATH ─────────────────────────────────────────────────────────────────
+
+    # Ensure ~/.local/bin is on PATH for interactive shells.
+    # We write to ~/.bashrc; if the user switches to zsh/fish, adjust here.
+    - name: Ensure ~/.local/bin is in PATH for {{ sandbox_user }}
+      ansible.builtin.lineinfile:
+        path: /home/{{ sandbox_user }}/.bashrc
+        line: 'export PATH="$HOME/.local/bin:$PATH"'
+        create: true
+        owner: "{{ sandbox_user }}"
+        group: "{{ sandbox_user }}"
+        mode: "0644"

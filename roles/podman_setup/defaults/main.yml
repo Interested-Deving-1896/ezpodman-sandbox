@@ -1,0 +1,10 @@
+---
+# roles/podman_setup/defaults/main.yml
+#
+# 'defaults' has the lowest variable precedence — override with group_vars,
+# host_vars, or -e without any special effort.
+
+# The non-root user that runs Podman rootlessly.
+# Created by this role if it doesn't exist.
+# All containers, sockets, and toolchain binaries belong to this user.
+sandbox_user: podman

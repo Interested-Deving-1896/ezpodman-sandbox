@@ -1,0 +1,95 @@
+---
+# roles/podman_setup/tasks/main.yml
+#
+# Installs Podman and configures it for rootless use.
+# Runs on: all VMs (ezpodman-local + podman-remote).
+# The OS-specific sections are gated on ansible_os_family, which Ansible
+# detects during gather_facts at the top of setup.yml.
+
+# ── 1. Install Podman ────────────────────────────────────────────────────────
+
+# Fedora ships Podman in its default repos — no extra repo needed.
+- name: Install Podman (Fedora/RedHat)
+  ansible.builtin.dnf:
+    name: podman
+    state: present
+  when: ansible_os_family == "RedHat"
+
+# Debian 13 (Trixie) ships a recent Podman in main — no backports needed.
+- name: Update apt cache (Debian)
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600   # skip if cache is less than 1 hour old
+  when: ansible_os_family == "Debian"
+
+- name: Install Podman (Debian)
+  ansible.builtin.apt:
+    name: podman
+    state: present
+  when: ansible_os_family == "Debian"
+
+# ── 2. Create sandbox user ───────────────────────────────────────────────────
+
+# Rootless Podman requires a real (non-root) user with entries in
+# /etc/subuid and /etc/subgid for user namespace mapping.
+# Modern useradd (shadow-utils ≥ 4.8) auto-populates subuid/subgid on
+# user creation, so we don't need to manage those files manually.
+- name: Create sandbox user '{{ sandbox_user }}'
+  ansible.builtin.user:
+    name: "{{ sandbox_user }}"
+    comment: "Rootless Podman sandbox user"
+    shell: /bin/bash
+    # create_home ensures ~/.config and ~/.local are writable for user services
+    create_home: true
+    state: present
+  register: sandbox_user_info
+
+# ── 3. Enable lingering ──────────────────────────────────────────────────────
+
+# 'loginctl enable-linger' tells systemd to start the user's session manager
+# at boot and keep it running even when no one is logged in. Without this,
+# podman.socket (and any user-level systemd units) would only be active
+# while the user has an open session — useless for a headless VM.
+- name: Enable lingering for '{{ sandbox_user }}'
+  ansible.builtin.command:
+    cmd: loginctl enable-linger {{ sandbox_user }}
+  changed_when: false   # loginctl enable-linger is idempotent; suppress noise
+
+# ── 4. Enable podman.socket (podman-remote only) ─────────────────────────────
+
+# podman.socket is the systemd user unit that activates the Podman REST API
+# on demand. ezpodman-local connects to it over SSH as:
+#   ssh podman@podman-remote podman system service
+# or by forwarding the socket path via CONTAINER_HOST.
+#
+# This block only runs on hosts in the [remote] inventory group.
+# The XDG_RUNTIME_DIR env var tells systemd where to find the user's
+# runtime directory (where the socket lives). Its path is /run/user/<UID>.
+- name: Enable and start podman.socket for '{{ sandbox_user }}'
+  ansible.builtin.systemd:
+    name: podman.socket
+    enabled: true
+    state: started
+    scope: user
+  become: true
+  become_user: "{{ sandbox_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ sandbox_user_info.uid }}"
+  when: inventory_hostname in groups['remote']
+
+# ── 5. Smoke-test ────────────────────────────────────────────────────────────
+
+# Confirm Podman can run a container rootlessly. This catches subuid/subgid
+# misconfigurations or missing kernel features before the containers_up play.
+# 'podman run --rm' pulls the image, runs it, and removes the container.
+# '--network none' avoids DNS issues in the Incus-internal network.
+- name: Smoke-test rootless Podman ('podman run --rm hello-world')
+  ansible.builtin.command:
+    cmd: podman run --rm --network none docker.io/hello-world
+  become: true
+  become_user: "{{ sandbox_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ sandbox_user_info.uid }}"
+  register: podman_smoke
+  changed_when: false
+  failed_when: "'Hello from Docker!' not in podman_smoke.stdout"
