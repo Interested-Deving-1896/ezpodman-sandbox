@@ -165,7 +165,7 @@ No SSH fallback needed. Validate connectivity before first run with:
 ### What is working
 - `provision.yml` + `roles/incus_project` — tested and working
 - `ezpodman-sandbox` project exists on `badger`
-- `ezpodman-local` (Fedora 43) and `podman-remote` (Debian 13) are running
+- `ezpodman-local` (Fedora 43) and `podman-remote` (Debian Trixie) are running
 
 ### What is scaffolded but not yet tested
 - `playbooks/setup.yml` + `roles/podman_setup` — written, not run yet
