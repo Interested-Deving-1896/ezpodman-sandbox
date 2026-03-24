@@ -1,0 +1,40 @@
+---
+# playbooks/provision.yml
+#
+# PURPOSE: Create the 'ezpodman-sandbox' Incus project and launch ezpodman-local + podman-remote.
+#
+# This playbook runs on your Mac (localhost). It does NOT use the incus
+# connection plugin — that plugin is for running tasks *inside* VMs (used by
+# setup.yml, containers_up.yml, etc.). Here we use the incus CLI directly to
+# build the environment that those later playbooks will connect into.
+#
+# USAGE:
+#   ansible-playbook -i inventory/hosts.ini playbooks/provision.yml
+#
+#   # Target a different remote at runtime:
+#   ansible-playbook -i inventory/hosts.ini playbooks/provision.yml \
+#     -e "incus_remote=falcon"
+#
+# PREREQUISITES (done once, outside Ansible):
+#   1. incus CLI installed on your Mac
+#   2. Named remote configured and reachable:
+#        incus remote list | grep badger
+#        incus project list badger:    ← quick connectivity test
+#   3. Ansible collection installed:
+#        ansible-galaxy collection install community.general
+#
+# WHAT HAPPENS:
+#   1. incus_project role validates the remote is reachable
+#   2. Creates the 'ezpodman-sandbox' project on the remote (if absent)
+#   3. Launches ezpodman-local (Fedora 43) and podman-remote (Debian 13) as VMs (if absent)
+#   4. Waits until both VMs respond to exec — confirming they booted
+#
+# NEXT STEP after this completes:
+#   ansible-playbook -i inventory/hosts.ini playbooks/setup.yml
+
+- name: Provision ezpodman-sandbox Incus project and VMs
+  hosts: localhost
+  gather_facts: false   # we don't need Mac facts; skip the overhead
+
+  roles:
+    - role: incus_project

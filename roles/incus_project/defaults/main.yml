@@ -1,0 +1,23 @@
+---
+# roles/incus_project/defaults/main.yml
+#
+# Default VM definitions. These can be overridden with -e or a vars_file.
+# 'defaults' has the lowest variable precedence in Ansible — any group_var,
+# host_var, or -e value will win over these.
+
+vms:
+  - name: ezpodman-local
+    # 'images:' is the alias for https://images.linuxcontainers.org — the
+    # public Incus/LXC image server. The '/cloud' suffix selects the variant
+    # with cloud-init pre-installed, which Ansible needs to run tasks.
+    # Verify available aliases: incus image list images: | grep -i fedora/43
+    image: images:fedora/43/cloud
+    cpu: "2"
+    memory: 2GiB
+
+  - name: podman-remote
+    # Debian 13 (Trixie). Same cloud-init requirement as above.
+    # Verify: incus image list images: | grep -i debian/13
+    image: images:debian/13/cloud
+    cpu: "2"
+    memory: 2GiB

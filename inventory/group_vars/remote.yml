@@ -1,0 +1,7 @@
+---
+# group_vars/remote.yml — vars for podman-remote (Debian, remote/target role).
+# Applied automatically to hosts in the [remote] group.
+
+# Software installed by setup.yml on this VM: podman only.
+# The systemd user socket (podman.socket) must be enabled here so that
+# ezpodman-local can reach the Podman API remotely over SSH.

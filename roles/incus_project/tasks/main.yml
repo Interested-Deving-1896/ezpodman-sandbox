@@ -1,0 +1,102 @@
+---
+# roles/incus_project/tasks/main.yml
+#
+# Creates the Incus project and launches VMs on the target remote.
+# Runs on: localhost (uses the incus CLI, which reads ~/.config/incus/ for
+# named remote credentials — no URL or cert paths needed here).
+
+# ── 1. Validate remote ───────────────────────────────────────────────────────
+
+# Fail fast with a clear message if the named remote isn't configured.
+# Better to catch this here than get a cryptic connection error mid-play.
+- name: Verify remote '{{ incus_remote }}' is configured
+  ansible.builtin.command:
+    cmd: incus remote get-default  # we just need incus to respond; list is checked next
+  changed_when: false
+
+- name: List configured remotes
+  ansible.builtin.command:
+    cmd: incus remote list --format csv
+  register: configured_remotes
+  changed_when: false
+
+- name: Fail if remote '{{ incus_remote }}' is not in incus remote list
+  ansible.builtin.fail:
+    msg: >
+      Remote '{{ incus_remote }}' is not configured. Add it with:
+        incus remote add {{ incus_remote }} https://{{ incus_remote }}.home.lan:8443 --accept-certificate
+  when: incus_remote not in configured_remotes.stdout
+
+# ── 2. Project ───────────────────────────────────────────────────────────────
+
+# Check which projects already exist on the target remote.
+# 'changed_when: false' tells Ansible this task never modifies state, so it
+# won't count toward the play's "changed" summary.
+- name: List projects on remote '{{ incus_remote }}'
+  ansible.builtin.command:
+    cmd: incus project list {{ incus_remote }}: --format csv
+  register: existing_projects
+  changed_when: false
+
+# Only create the project if it isn't already listed.
+# The 'remote:project' syntax mirrors 'remote:instance' — it tells the
+# incus CLI to target the named remote rather than the local daemon.
+- name: Create project '{{ incus_project }}' on '{{ incus_remote }}'
+  ansible.builtin.command:
+    cmd: incus project create {{ incus_remote }}:{{ incus_project }}
+  when: incus_project not in existing_projects.stdout
+
+# ── 3. Launch VMs ────────────────────────────────────────────────────────────
+
+# Check which instances already exist in the project.
+# --columns n  → output only the Name column (makes the 'not in' check reliable)
+- name: List existing instances in project '{{ incus_project }}'
+  ansible.builtin.command:
+    cmd: >
+      incus list {{ incus_remote }}: --project {{ incus_project }}
+      --format csv --columns n
+  register: existing_instances
+  changed_when: false
+
+# Loop over the 'vms' list from defaults/main.yml and launch any that
+# don't exist yet. Breaking this down:
+#   item.image          — source image  (e.g. images:fedora/43/cloud)
+#   incus_remote:name   — destination   (e.g. badger:ezpodman-local)
+#   --vm                — virtual machine, not a system container
+#   --project           — put it in our sandbox project, not 'default'
+#   --config            — resource limits set at launch time
+#
+# 'when: item.name not in existing_instances.stdout' makes this idempotent:
+# re-running the playbook skips VMs that are already present.
+- name: Launch VM '{{ item.name }}'
+  ansible.builtin.command:
+    cmd: >
+      incus launch {{ item.image }} {{ incus_remote }}:{{ item.name }}
+      --vm
+      --project {{ incus_project }}
+      --config limits.cpu={{ item.cpu }}
+      --config limits.memory={{ item.memory }}
+  loop: "{{ vms }}"
+  when: item.name not in existing_instances.stdout
+
+# ── 4. Wait for VMs to accept connections ────────────────────────────────────
+
+# After 'incus launch' returns, the VM is booting. We poll by running a
+# trivial command (true) inside each VM until it succeeds.
+# Tune retries × delay for slow hosts; 30 × 10 s = 5 minutes max wait.
+#
+# 'until: result is not failed' retries on any non-zero exit code.
+# 'changed_when: false' suppresses false "changed" reports from exec.
+- name: Wait for '{{ item.name }}' to accept exec connections
+  ansible.builtin.command:
+    cmd: incus exec {{ incus_remote }}:{{ item.name }} --project {{ incus_project }} -- true
+  loop: "{{ vms }}"
+  loop_control:
+    # Give the register variable a unique name per iteration
+    loop_var: item
+    label: "{{ item.name }}"
+  register: result
+  until: result is not failed
+  retries: 30
+  delay: 10
+  changed_when: false

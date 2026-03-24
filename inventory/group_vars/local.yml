@@ -1,0 +1,9 @@
+---
+# group_vars/local.yml — vars for ezpodman-local (Fedora, local/main role).
+# Applied automatically to hosts in the [local] group.
+
+# Software installed by setup.yml on this VM:
+#   curl, podman, docker, ezpodman, lazydocker, git, go, ssh, jq, fzf
+#
+# This VM initiates remote Podman connections to podman-remote over SSH —
+# that SSH key must be provisioned manually (see CLAUDE.md prerequisites).
