@@ -15,16 +15,16 @@ network_bridge: incusbr0
 vms:
   - name: ezpodman-local
     # 'images:' is the alias for https://images.linuxcontainers.org — the
-    # public Incus/LXC image server. The '/cloud' suffix selects the variant
-    # with cloud-init pre-installed, which Ansible needs to run tasks.
+    # public Incus/LXC image server. Plain image (no /cloud suffix) since
+    # Ansible connects via 'incus exec', not SSH — cloud-init is not needed.
     # Verify available aliases: incus image list images: | grep -i fedora/43
-    image: images:fedora/43/cloud
+    image: images:fedora/43
     cpu: "2"
     memory: 2GiB
 
   - name: podman-remote
-    # Debian 13 (Trixie). Same cloud-init requirement as above.
-    # Verify: incus image list images: | grep -i debian/13
-    image: images:debian/13/cloud
+    # Debian 13 (Trixie). Using the codename alias — more stable than /13.
+    # Verify: incus image list images: | grep -i debian/trixie
+    image: images:debian/trixie
     cpu: "2"
     memory: 2GiB
