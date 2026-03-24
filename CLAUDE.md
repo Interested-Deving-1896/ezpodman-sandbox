@@ -157,3 +157,46 @@ The `community.general.incus` connection plugin fully supports `ansible_incus_re
 for named remotes. The plugin constructs `incus exec <remote>:<instance> --project <project>`.
 No SSH fallback needed. Validate connectivity before first run with:
   `incus project list badger:`
+
+---
+
+## Current Status (session 2026-03-24)
+
+### What is working
+- `provision.yml` + `roles/incus_project` — tested and working
+- `ezpodman-sandbox` project exists on `badger`
+- `ezpodman-local` (Fedora 43) and `podman-remote` (Debian 13) are running
+
+### What is scaffolded but not yet tested
+- `playbooks/setup.yml` + `roles/podman_setup` — written, not run yet
+
+### What is not yet written
+- `playbooks/containers_up.yml`
+- `playbooks/containers_down.yml`
+- `playbooks/nuke.yml`
+- `roles/test_containers/`
+
+### Next step
+Run and validate `setup.yml`, then scaffold `containers_up.yml` and `nuke.yml`.
+
+### Decisions and gotchas to remember
+
+**New Incus projects have an empty default profile** (no root disk, no network).
+`incus launch` must always pass `--storage {{ storage_pool }}` and `--network {{ network_bridge }}`.
+Defaults: `storage_pool: default`, `network_bridge: incusbr0` (in `roles/incus_project/defaults/main.yml`).
+
+**ezpodman is fetched from GitHub**, not Forgejo, to avoid the Step-CA TLS prerequisite
+on fresh VMs. URL: `https://raw.githubusercontent.com/alfonsosanchez12/ezpodman/main/ezpodman`
+
+**sandbox_user** (rootless Podman user) defaults to `podman`, defined in
+`roles/podman_setup/defaults/main.yml`. All containers, sockets, and binaries belong to this user.
+
+**lazydocker arch mapping** — `ansible_architecture` returns `aarch64` on ARM VMs but
+lazydocker release filenames use `arm64`. A mapping var will be needed in `setup.yml`
+Play 2 before the download task if running on M2-hosted VMs.
+
+**Read-only `command` tasks** must have `check_mode: false` so `--check` runs can
+still query remote state. Write tasks (create, launch) stay check-mode-skippable.
+
+**`ansible.cfg`** at project root sets `inventory = inventory/hosts.ini` and
+`roles_path = roles` — always run `ansible-playbook` from the project root.
