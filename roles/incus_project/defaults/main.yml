@@ -5,6 +5,13 @@
 # 'defaults' has the lowest variable precedence in Ansible — any group_var,
 # host_var, or -e value will win over these.
 
+# New Incus projects have an empty default profile — no root disk, no network.
+# We pass --storage and --network explicitly so the launch doesn't depend on
+# a pre-configured profile in the project.
+# Run `incus storage list badger:` and `incus network list badger:` to confirm names.
+storage_pool: default
+network_bridge: incusbr0
+
 vms:
   - name: ezpodman-local
     # 'images:' is the alias for https://images.linuxcontainers.org — the

@@ -7,18 +7,16 @@
 
 # ── 1. Validate remote ───────────────────────────────────────────────────────
 
-# Fail fast with a clear message if the named remote isn't configured.
-# Better to catch this here than get a cryptic connection error mid-play.
-- name: Verify remote '{{ incus_remote }}' is configured
-  ansible.builtin.command:
-    cmd: incus remote get-default  # we just need incus to respond; list is checked next
-  changed_when: false
-
+# 'check_mode: false' on read-only command tasks forces them to actually run
+# during --check (dry-run) mode. By default Ansible skips all 'command' tasks
+# in check mode because they might be destructive — but these only read state
+# and we need their output for subsequent tasks to work correctly.
 - name: List configured remotes
   ansible.builtin.command:
     cmd: incus remote list --format csv
   register: configured_remotes
   changed_when: false
+  check_mode: false
 
 - name: Fail if remote '{{ incus_remote }}' is not in incus remote list
   ansible.builtin.fail:
@@ -34,16 +32,17 @@
 # won't count toward the play's "changed" summary.
 - name: List projects on remote '{{ incus_remote }}'
   ansible.builtin.command:
-    cmd: incus project list {{ incus_remote }}: --format csv
+    cmd: "incus project list {{ incus_remote }}: --format csv"
   register: existing_projects
   changed_when: false
+  check_mode: false
 
 # Only create the project if it isn't already listed.
 # The 'remote:project' syntax mirrors 'remote:instance' — it tells the
 # incus CLI to target the named remote rather than the local daemon.
 - name: Create project '{{ incus_project }}' on '{{ incus_remote }}'
   ansible.builtin.command:
-    cmd: incus project create {{ incus_remote }}:{{ incus_project }}
+    cmd: "incus project create {{ incus_remote }}:{{ incus_project }}"
   when: incus_project not in existing_projects.stdout
 
 # ── 3. Launch VMs ────────────────────────────────────────────────────────────
@@ -57,6 +56,7 @@
       --format csv --columns n
   register: existing_instances
   changed_when: false
+  check_mode: false
 
 # Loop over the 'vms' list from defaults/main.yml and launch any that
 # don't exist yet. Breaking this down:
@@ -68,15 +68,19 @@
 #
 # 'when: item.name not in existing_instances.stdout' makes this idempotent:
 # re-running the playbook skips VMs that are already present.
-- name: Launch VM '{{ item.name }}'
+- name: Launch VMs
   ansible.builtin.command:
     cmd: >
       incus launch {{ item.image }} {{ incus_remote }}:{{ item.name }}
       --vm
       --project {{ incus_project }}
+      --storage {{ storage_pool }}
+      --network {{ network_bridge }}
       --config limits.cpu={{ item.cpu }}
       --config limits.memory={{ item.memory }}
   loop: "{{ vms }}"
+  loop_control:
+    label: "{{ item.name }}"   # shown per-iteration in output instead of the full item dict
   when: item.name not in existing_instances.stdout
 
 # ── 4. Wait for VMs to accept connections ────────────────────────────────────
@@ -87,9 +91,9 @@
 #
 # 'until: result is not failed' retries on any non-zero exit code.
 # 'changed_when: false' suppresses false "changed" reports from exec.
-- name: Wait for '{{ item.name }}' to accept exec connections
+- name: Wait for VMs to accept exec connections
   ansible.builtin.command:
-    cmd: incus exec {{ incus_remote }}:{{ item.name }} --project {{ incus_project }} -- true
+    cmd: "incus exec {{ incus_remote }}:{{ item.name }} --project {{ incus_project }} -- true"
   loop: "{{ vms }}"
   loop_control:
     # Give the register variable a unique name per iteration
