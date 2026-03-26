@@ -195,6 +195,10 @@ on fresh VMs. URL: `https://raw.githubusercontent.com/alfonsosanchez12/ezpodman/
 lazydocker release filenames use `arm64`. A mapping var will be needed in `setup.yml`
 Play 2 before the download task if running on M2-hosted VMs.
 
+**nuke.yml teardown order** — when deleting the `ezpodman-sandbox` project, any
+cached images inside the project must be deleted first, otherwise the project
+deletion will fail. Order: containers → VMs → project images → project.
+
 **Read-only `command` tasks** must have `check_mode: false` so `--check` runs can
 still query remote state. Write tasks (create, launch) stay check-mode-skippable.
 
