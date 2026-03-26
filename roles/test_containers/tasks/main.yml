@@ -1,0 +1,42 @@
+---
+# roles/test_containers/tasks/main.yml
+#
+# Starts or stops the test containers defined in group_vars (local.yml / remote.yml).
+# The 'container_state' var controls direction — set by containers_up/down.yml.
+#
+# Runs as: sandbox_user (rootless Podman). The play must 'become' this user
+# and set XDG_RUNTIME_DIR so Podman can find the user's runtime socket.
+# Both are handled in containers_up/down.yml at the play level.
+
+# Look up the sandbox user's UID so we can construct XDG_RUNTIME_DIR.
+# The getent module queries /etc/passwd and stores results in ansible_facts.
+# Format: ansible_facts.getent_passwd['podman'] = [pw, uid, gid, gecos, home, shell]
+- name: Look up sandbox user UID
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ sandbox_user }}"
+
+- name: Set XDG_RUNTIME_DIR for sandbox user
+  ansible.builtin.set_fact:
+    xdg_runtime_dir: "/run/user/{{ ansible_facts.getent_passwd[sandbox_user][1] }}"
+
+# Manage each container defined in group_vars (containers: list).
+# 'containers.podman.podman_container' is idempotent — re-running with
+# state: started on an already-running container is a no-op.
+- name: Manage test containers (state={{ container_state }})
+  containers.podman.podman_container:
+    name: "{{ item.name }}"
+    image: "{{ item.image }}"
+    state: "{{ container_state }}"
+    ports: "{{ item.ports | default([]) }}"
+    env: "{{ item.env | default({}) }}"
+    # restart_policy ensures containers come back up after a VM reboot.
+    # 'on-failure' is a safe default — won't mask crash loops indefinitely.
+    restart_policy: on-failure
+  loop: "{{ containers }}"
+  loop_control:
+    label: "{{ item.name }}"
+  become: true
+  become_user: "{{ sandbox_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "{{ xdg_runtime_dir }}"

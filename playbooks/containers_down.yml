@@ -1,0 +1,20 @@
+---
+# playbooks/containers_down.yml
+#
+# PURPOSE: Stop and remove test containers on both VMs.
+#          Does not touch the VMs themselves — use nuke.yml for full teardown.
+#
+# USAGE:
+#   ansible-playbook -i inventory/hosts.ini playbooks/containers_down.yml
+
+- name: Stop and remove test containers
+  hosts: all
+  gather_facts: false
+
+  vars_files:
+    - "{{ playbook_dir }}/../roles/podman_setup/defaults/main.yml"
+
+  roles:
+    - role: test_containers
+      vars:
+        container_state: absent

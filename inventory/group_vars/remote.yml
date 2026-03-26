@@ -5,3 +5,18 @@
 # Software installed by setup.yml on this VM: podman only.
 # The systemd user socket (podman.socket) must be enabled here so that
 # ezpodman-local can reach the Podman API remotely over SSH.
+
+# Test containers started by containers_up.yml.
+containers:
+  - name: nginx
+    image: docker.io/library/nginx:alpine
+    ports: ["8080:80"]
+
+  - name: postgres
+    image: docker.io/library/postgres:16-alpine
+    ports: ["5432:5432"]
+    # POSTGRES_PASSWORD is required — postgres refuses to start without it.
+    # This is ephemeral test data only, not a real secret.
+    env:
+      POSTGRES_PASSWORD: testpass
+      POSTGRES_DB: testdb

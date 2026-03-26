@@ -1,0 +1,28 @@
+---
+# playbooks/containers_up.yml
+#
+# PURPOSE: Start test containers on both VMs.
+#
+# USAGE:
+#   ansible-playbook -i inventory/hosts.ini playbooks/containers_up.yml
+#
+# CONTAINERS:
+#   ezpodman-local  — nginx (8080), caddy (8081)
+#   podman-remote   — nginx (8080), postgres (5432)
+#
+# All containers are rootless, owned by sandbox_user (default: 'podman').
+# Definitions live in inventory/group_vars/local.yml and remote.yml.
+#
+# NEXT STEP: test ezpodman connectivity, then containers_down.yml to clean up.
+
+- name: Start test containers
+  hosts: all
+  gather_facts: false
+
+  vars_files:
+    - "{{ playbook_dir }}/../roles/podman_setup/defaults/main.yml"
+
+  roles:
+    - role: test_containers
+      vars:
+        container_state: started

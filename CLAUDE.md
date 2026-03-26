@@ -146,7 +146,7 @@ Done once before running any playbook:
 
 ## Constraints and Preferences
 
-- Ansible collections required: `community.general`
+- Ansible collections required: `community.general`, `containers.podman`
 - No Docker Compose; use `containers.podman` module or `podman run`
 - Playbooks should be idempotent where possible
 - Add comments explaining non-obvious Ansible patterns (operator is learning)

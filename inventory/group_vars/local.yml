@@ -7,3 +7,14 @@
 #
 # This VM initiates remote Podman connections to podman-remote over SSH —
 # that SSH key must be provisioned manually (see CLAUDE.md prerequisites).
+
+# Test containers started by containers_up.yml.
+# Rootless — ports below 1024 require extra kernel caps, so we use high ports.
+containers:
+  - name: nginx
+    image: docker.io/library/nginx:alpine
+    ports: ["8080:80"]
+
+  - name: caddy
+    image: docker.io/library/caddy:alpine
+    ports: ["8081:80"]

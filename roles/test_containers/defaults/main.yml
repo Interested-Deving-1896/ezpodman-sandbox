@@ -1,0 +1,7 @@
+---
+# roles/test_containers/defaults/main.yml
+
+# Target state passed in by the calling playbook.
+# 'started' → containers_up.yml
+# 'absent'  → containers_down.yml
+container_state: started
