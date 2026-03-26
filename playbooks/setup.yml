@@ -27,7 +27,29 @@
 
 - name: Common setup — Podman + rootless config
   hosts: all
-  gather_facts: true   # needed: ansible_os_family, ansible_architecture
+  # gather_facts is deferred (false here) so we can bootstrap Python first.
+  # Fedora minimal images ship without Python, which Ansible requires for all
+  # modules except 'raw'. We install it with raw, then gather facts normally.
+  gather_facts: false
+
+  pre_tasks:
+    - name: Bootstrap Python3 (raw — works without Python on the remote)
+      ansible.builtin.raw: |
+        if command -v python3 >/dev/null 2>&1; then
+          echo "python3 already present"
+        elif command -v dnf >/dev/null 2>&1; then
+          dnf install -y python3
+        elif command -v apt-get >/dev/null 2>&1; then
+          apt-get install -y python3
+        fi
+      changed_when: false
+      check_mode: false
+
+    # Now that Python exists, gather facts as normal.
+    # ansible_facts['os_family'] and ansible_facts['architecture'] are used
+    # by the podman_setup role and the toolchain play below.
+    - name: Gather facts
+      ansible.builtin.setup:
 
   roles:
     - role: podman_setup
@@ -66,13 +88,8 @@
     # We download the release tarball, extract the binary, and place it in
     # ~/.local/bin for the sandbox user (rootless, no system-wide install).
     #
-    # The URL embeds the version and architecture. ansible_architecture
+    # The URL embeds the version and architecture. ansible_facts['architecture']
     # returns 'x86_64' or 'aarch64'; lazydocker releases use the same names.
-    - name: Set lazydocker download URL
-      ansible.builtin.set_fact:
-        lazydocker_url: >-
-          https://github.com/jesseduffield/lazydocker/releases/latest/download/lazydocker_Linux_{{ ansible_architecture }}.tar.gz
-
     - name: Create ~/.local/bin for {{ sandbox_user }}
       ansible.builtin.file:
         path: /home/{{ sandbox_user }}/.local/bin
@@ -81,7 +98,23 @@
         group: "{{ sandbox_user }}"
         mode: "0755"
 
-    - name: Download and extract lazydocker
+    # lazydocker release filenames embed the version number
+    # (e.g. lazydocker_0.23.3_Linux_x86_64.tar.gz), so /latest/download/ won't
+    # resolve. We query the GitHub API to discover the current version tag first.
+    - name: Get latest lazydocker release version from GitHub API
+      ansible.builtin.uri:
+        url: https://api.github.com/repos/jesseduffield/lazydocker/releases/latest
+        return_content: true
+      register: lazydocker_release
+
+    - name: Set lazydocker download URL
+      ansible.builtin.set_fact:
+        # tag_name is e.g. "v0.23.3"; strip the leading 'v' for the filename.
+        lazydocker_version: "{{ lazydocker_release.json.tag_name | regex_replace('^v', '') }}"
+        lazydocker_url: >-
+          https://github.com/jesseduffield/lazydocker/releases/download/{{ lazydocker_release.json.tag_name }}/lazydocker_{{ lazydocker_release.json.tag_name | regex_replace('^v', '') }}_Linux_{{ ansible_facts['architecture'] }}.tar.gz
+
+    - name: Download and extract lazydocker {{ lazydocker_version }}
       ansible.builtin.unarchive:
         src: "{{ lazydocker_url }}"
         dest: /home/{{ sandbox_user }}/.local/bin

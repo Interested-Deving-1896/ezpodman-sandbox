@@ -3,7 +3,7 @@
 #
 # Installs Podman and configures it for rootless use.
 # Runs on: all VMs (ezpodman-local + podman-remote).
-# The OS-specific sections are gated on ansible_os_family, which Ansible
+# The OS-specific sections are gated on ansible_facts['os_family'], which Ansible
 # detects during gather_facts at the top of setup.yml.
 
 # ── 1. Install Podman ────────────────────────────────────────────────────────
@@ -13,20 +13,20 @@
   ansible.builtin.dnf:
     name: podman
     state: present
-  when: ansible_os_family == "RedHat"
+  when: ansible_facts['os_family'] == "RedHat"
 
 # Debian 13 (Trixie) ships a recent Podman in main — no backports needed.
 - name: Update apt cache (Debian)
   ansible.builtin.apt:
     update_cache: true
     cache_valid_time: 3600   # skip if cache is less than 1 hour old
-  when: ansible_os_family == "Debian"
+  when: ansible_facts['os_family'] == "Debian"
 
 - name: Install Podman (Debian)
   ansible.builtin.apt:
     name: podman
     state: present
-  when: ansible_os_family == "Debian"
+  when: ansible_facts['os_family'] == "Debian"
 
 # ── 2. Create sandbox user ───────────────────────────────────────────────────
 
