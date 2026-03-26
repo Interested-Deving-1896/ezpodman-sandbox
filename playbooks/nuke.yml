@@ -1,0 +1,124 @@
+---
+# playbooks/nuke.yml
+#
+# PURPOSE: Full teardown — containers → VMs → images → project.
+#
+# USAGE:
+#   # Graceful (stop containers first, then destroy everything):
+#   ansible-playbook playbooks/nuke.yml
+#
+#   # Force (skip container shutdown, destroy everything immediately):
+#   ansible-playbook playbooks/nuke.yml --tags force
+#
+# WARNING: This is destructive and irreversible. The 'ezpodman-sandbox'
+# Incus project and everything inside it will be permanently deleted.
+
+# ── Play 1: Graceful container shutdown ──────────────────────────────────────
+#
+# Tagged 'graceful' — the entire play is skipped when --tags force is passed.
+# Runs on the VMs directly via the incus connection plugin.
+
+- name: Graceful container shutdown
+  hosts: all
+  gather_facts: false
+  tags: graceful
+
+  # Load sandbox_user (needed by test_containers role for become + XDG_RUNTIME_DIR)
+  vars_files:
+    - "{{ playbook_dir }}/../roles/podman_setup/defaults/main.yml"
+
+  pre_tasks:
+    # Python may not be installed on a freshly provisioned VM — bootstrap it
+    # with raw (which works without Python) before any other modules run.
+    - name: Bootstrap Python3
+      ansible.builtin.raw: |
+        if command -v python3 >/dev/null 2>&1; then
+          echo "already present"
+        elif command -v dnf >/dev/null 2>&1; then
+          dnf install -y python3
+        elif command -v apt-get >/dev/null 2>&1; then
+          apt-get install -y python3
+        fi
+      changed_when: false
+      check_mode: false
+
+    - name: Gather facts
+      ansible.builtin.setup:
+
+  roles:
+    - role: test_containers
+      vars:
+        container_state: absent
+
+# ── Play 2: Infrastructure teardown ──────────────────────────────────────────
+#
+# Tagged 'force' — always runs, whether or not --tags force was passed.
+# Runs on localhost using the incus CLI (same pattern as provision.yml).
+#
+# Teardown order matters:
+#   1. Delete VMs first (releases their disk volumes)
+#   2. Delete cached images (required before project can be deleted)
+#   3. Delete the project
+
+- name: Destroy VMs, images, and project
+  hosts: localhost
+  gather_facts: false
+  tags: force
+
+  tasks:
+
+    # ── VMs ─────────────────────────────────────────────────────────────────
+
+    # List what actually exists rather than relying on the 'vms' var — this
+    # handles partial deployments where only some VMs were created.
+    - name: List VMs in project '{{ incus_project }}'
+      ansible.builtin.command:
+        cmd: >
+          incus list {{ incus_remote }}: --project {{ incus_project }}
+          --format csv --columns n
+      register: existing_vms
+      changed_when: false
+      check_mode: false
+
+    - name: Delete VMs (--force stops them first if still running)
+      ansible.builtin.command:
+        cmd: "incus delete {{ incus_remote }}:{{ item }} --project {{ incus_project }} --force"
+      loop: "{{ existing_vms.stdout_lines }}"
+      loop_control:
+        label: "{{ item }}"
+      when: existing_vms.stdout_lines | length > 0
+
+    # ── Images ───────────────────────────────────────────────────────────────
+
+    # Incus caches pulled images inside the project. The project cannot be
+    # deleted while images remain — this step must come after VM deletion.
+    - name: List cached images in project '{{ incus_project }}'
+      ansible.builtin.command:
+        cmd: >
+          incus image list {{ incus_remote }}: --project {{ incus_project }}
+          --format csv --columns f
+      register: project_images
+      changed_when: false
+      check_mode: false
+
+    - name: Delete cached images
+      ansible.builtin.command:
+        cmd: "incus image delete {{ incus_remote }}:{{ item }} --project {{ incus_project }}"
+      loop: "{{ project_images.stdout_lines }}"
+      loop_control:
+        label: "{{ item }}"
+      when: project_images.stdout_lines | length > 0
+
+    # ── Project ──────────────────────────────────────────────────────────────
+
+    - name: List projects on '{{ incus_remote }}'
+      ansible.builtin.command:
+        cmd: "incus project list {{ incus_remote }}: --format csv"
+      register: existing_projects
+      changed_when: false
+      check_mode: false
+
+    - name: Delete project '{{ incus_project }}'
+      ansible.builtin.command:
+        cmd: "incus project delete {{ incus_remote }}:{{ incus_project }}"
+      when: incus_project in existing_projects.stdout
