@@ -3,6 +3,9 @@
 Ansible automation to provision, configure, and tear down a sandbox environment
 for testing [ezpodman](https://github.com/alfonsosanchez12/ezpodman) — a lazydocker wrapper for Podman.
 
+> For a deep dive into the architecture and design decisions behind this automation,
+> see [docs/design.md](docs/design.md).
+
 ---
 
 ## Deploy everything
@@ -10,9 +13,9 @@ for testing [ezpodman](https://github.com/alfonsosanchez12/ezpodman) — a lazyd
 `incus_remote` is required on every run — there is no default. Pass it explicitly:
 
 ```bash
-ansible-playbook playbooks/provision.yml -e "incus_remote=badger" && \
-ansible-playbook playbooks/setup.yml -e "incus_remote=badger" && \
-ansible-playbook playbooks/containers_up.yml -e "incus_remote=badger"
+ansible-playbook playbooks/provision.yml -e "incus_remote=<remote>" && \
+ansible-playbook playbooks/setup.yml -e "incus_remote=<remote>" && \
+ansible-playbook playbooks/containers_up.yml -e "incus_remote=<remote>"
 ```
 
 When complete you have:
@@ -34,7 +37,7 @@ ansible-galaxy collection install community.general containers.podman
 Verify the target remote is reachable:
 
 ```bash
-incus project list badger:
+incus project list <remote>:
 ```
 
 ---
@@ -43,17 +46,17 @@ incus project list badger:
 
 ### Target a different remote
 
-Pass `-e "incus_remote=<name>"` on every run. Available remotes: `badger`, `endurance`, `falcon`.
+Pass `-e "incus_remote=<name>"` on every run. Available remotes: your configured Incus remotes.
 
 ```bash
-ansible-playbook playbooks/provision.yml -e "incus_remote=falcon"
+ansible-playbook playbooks/provision.yml -e "incus_remote=<remote>"
 ```
 
 ### Change storage pool or network bridge
 
 ```bash
 ansible-playbook playbooks/provision.yml \
-  -e "incus_remote=badger" \
+  -e "incus_remote=<remote>" \
   -e "storage_pool=local" \
   -e "network_bridge=br0"
 ```
@@ -61,7 +64,7 @@ ansible-playbook playbooks/provision.yml \
 ### Dry run (check mode)
 
 ```bash
-ansible-playbook playbooks/provision.yml -e "incus_remote=badger" --check
+ansible-playbook playbooks/provision.yml -e "incus_remote=<remote>" --check
 ```
 
 Read-only tasks (list, query) still execute so the output is meaningful.
@@ -88,19 +91,19 @@ Each playbook is idempotent. Re-running it skips what already exists.
 ### Graceful (stops containers first)
 
 ```bash
-ansible-playbook playbooks/nuke.yml -e "incus_remote=badger"
+ansible-playbook playbooks/nuke.yml -e "incus_remote=<remote>"
 ```
 
 ### Force (skip container shutdown)
 
 ```bash
-ansible-playbook playbooks/nuke.yml -e "incus_remote=badger" --tags force
+ansible-playbook playbooks/nuke.yml -e "incus_remote=<remote>" --tags force
 ```
 
 ### Containers only (keep VMs)
 
 ```bash
-ansible-playbook playbooks/containers_down.yml -e "incus_remote=badger"
+ansible-playbook playbooks/containers_down.yml -e "incus_remote=<remote>"
 ```
 
 ---
@@ -141,7 +144,7 @@ Two steps are out of scope for Ansible and must be done once after `setup.yml`:
 
 ```bash
 # Root shell
-incus shell --project ezpodman-sandbox badger:ezpodman-local
+incus shell --project ezpodman-sandbox <remote>:ezpodman-local
 
 # Switch to the podman user — use 'su -' (with the dash), not plain 'su'.
 # The dash starts a login shell, which sources ~/.bashrc where XDG_RUNTIME_DIR,

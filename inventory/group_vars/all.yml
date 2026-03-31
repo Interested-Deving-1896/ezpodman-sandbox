@@ -4,10 +4,10 @@
 # 'incus_remote' selects which Incus server to target. It has no default —
 # you must pass it explicitly on every run:
 #
-#   ansible-playbook playbooks/provision.yml -e "incus_remote=badger"
+#   ansible-playbook playbooks/provision.yml -e "incus_remote=<remote>"
 #
 # See available remotes: incus remote list
-# Add a new remote:      incus remote add badger https://badger.home.lan:8443 --accept-certificate
+# Add a new remote:      incus remote add <remote> https://<your-server>:8443 --accept-certificate
 
 incus_project: ezpodman-sandbox
 

@@ -35,7 +35,7 @@
           - incus_remote | length > 0
         fail_msg: |
           'incus_remote' is not set. Pass it explicitly:
-            ansible-playbook playbooks/nuke.yml -e "incus_remote=badger"
+            ansible-playbook playbooks/nuke.yml -e "incus_remote=<remote>"
           Available remotes: incus remote list
       run_once: true
 

@@ -36,7 +36,7 @@ Your control node (Mac or Linux)
 │  ansible-playbook containers_up.yml
 │
 ▼
-Incus server (badger.home.lan)
+Incus server (your-server.home.lan)
 └── project: ezpodman-sandbox
     ├── ezpodman-local (Fedora 43)
     │   ├── podman (rootless) + podman-remote
@@ -194,18 +194,18 @@ the network entirely by using `incus exec`, which is roughly equivalent to
 Under the hood, every task Ansible runs translates to:
 
 ```bash
-incus exec badger:ezpodman-local --project ezpodman-sandbox -- /bin/sh -c "<task>"
+incus exec <remote>:ezpodman-local --project ezpodman-sandbox -- /bin/sh -c "<task>"
 ```
 
 The plugin reads two variables to know which server and project to target:
 
 ```yaml
-ansible_incus_remote: "{{ incus_remote }}"   # passed at runtime via -e "incus_remote=badger"
+ansible_incus_remote: "{{ incus_remote }}"   # passed at runtime via -e "incus_remote=<remote>"
 ansible_incus_project: ezpodman-sandbox
 ```
 
 **Why named remotes over URLs:** The `incus` CLI already knows how to reach
-`badger` (URL, TLS cert, key) from the `incus remote add` setup you did once.
+`<remote>` (URL, TLS cert, key) from the `incus remote add` setup you did once.
 The connection plugin reuses that config — no need to store cert paths in
 Ansible variables.
 
@@ -256,7 +256,7 @@ Overrides everything. Used to change the target remote or storage pool without
 editing any file:
 
 ```bash
-ansible-playbook provision.yml -e "incus_remote=falcon"
+ansible-playbook provision.yml -e "incus_remote=<remote>"
 ```
 
 ---
@@ -268,7 +268,7 @@ ansible-playbook provision.yml -e "incus_remote=falcon"
 **Used by:** `provision.yml`
 
 **What it does:**
-1. Verifies the named remote (`badger`) is configured on your control node
+1. Verifies the named remote (`<remote>`) is configured on your control node
 2. Creates the `ezpodman-sandbox` Incus project if it doesn't exist
 3. Launches both VMs if they don't exist
 4. Waits until both VMs respond to `incus exec`
@@ -276,7 +276,7 @@ ansible-playbook provision.yml -e "incus_remote=falcon"
 **Key design decision — CLI over Ansible modules:**
 The `community.general.incus_instance` module exists, but it requires you to
 pass the remote server URL and TLS cert paths directly. Since you already have
-named remotes configured (`incus remote add badger ...`), using the `incus`
+named remotes configured (`incus remote add <remote> ...`), using the `incus`
 CLI is simpler — it reads your local config and handles auth transparently.
 
 **`check_mode: false` on read tasks:**

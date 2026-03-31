@@ -9,14 +9,14 @@
 # build the environment that those later playbooks will connect into.
 #
 # USAGE (incus_remote is required — no default):
-#   ansible-playbook -i inventory/hosts.ini playbooks/provision.yml -e "incus_remote=badger"
-#   ansible-playbook -i inventory/hosts.ini playbooks/provision.yml -e "incus_remote=falcon"
+#   ansible-playbook -i inventory/hosts.ini playbooks/provision.yml -e "incus_remote=<remote>"
+#   ansible-playbook -i inventory/hosts.ini playbooks/provision.yml -e "incus_remote=<remote>"
 #
 # PREREQUISITES (done once, outside Ansible):
 #   1. incus CLI installed on your Mac
 #   2. Named remote configured and reachable:
-#        incus remote list | grep badger
-#        incus project list badger:    ← quick connectivity test
+#        incus remote list
+#        incus project list <remote>:    ← quick connectivity test
 #   3. Ansible collection installed:
 #        ansible-galaxy collection install community.general
 #
@@ -41,7 +41,7 @@
           - incus_remote | length > 0
         fail_msg: |
           'incus_remote' is not set. Pass it explicitly:
-            ansible-playbook playbooks/provision.yml -e "incus_remote=badger"
+            ansible-playbook playbooks/provision.yml -e "incus_remote=<remote>"
           Available remotes: incus remote list
 
   roles:

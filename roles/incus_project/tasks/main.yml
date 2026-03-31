@@ -61,7 +61,7 @@
 # Loop over the 'vms' list from defaults/main.yml and launch any that
 # don't exist yet. Breaking this down:
 #   item.image          — source image  (e.g. images:fedora/43/cloud)
-#   incus_remote:name   — destination   (e.g. badger:ezpodman-local)
+#   incus_remote:name   — destination   (<remote>:ezpodman-local)
 #   --vm                — virtual machine, not a system container
 #   --project           — put it in our sandbox project, not 'default'
 #   --config            — resource limits set at launch time

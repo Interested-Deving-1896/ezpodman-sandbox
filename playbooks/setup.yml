@@ -6,7 +6,7 @@
 #
 # USAGE:
 #   ansible-playbook -i inventory/hosts.ini playbooks/setup.yml
-#   ansible-playbook -i inventory/hosts.ini playbooks/setup.yml -e "incus_remote=falcon"
+#   ansible-playbook -i inventory/hosts.ini playbooks/setup.yml -e "incus_remote=<remote>"
 #
 # WHAT HAPPENS:
 #   Play 1 (all VMs):
@@ -40,7 +40,7 @@
           - incus_remote | length > 0
         fail_msg: |
           'incus_remote' is not set. Pass it explicitly:
-            ansible-playbook playbooks/setup.yml -e "incus_remote=badger"
+            ansible-playbook playbooks/setup.yml -e "incus_remote=<remote>"
           Available remotes: incus remote list
       run_once: true   # one check is enough — no need to assert on every VM
 

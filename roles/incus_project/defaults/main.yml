@@ -8,7 +8,7 @@
 # New Incus projects have an empty default profile — no root disk, no network.
 # We pass --storage and --network explicitly so the launch doesn't depend on
 # a pre-configured profile in the project.
-# Run `incus storage list badger:` and `incus network list badger:` to confirm names.
+# Run `incus storage list <remote>:` and `incus network list badger:` to confirm names.
 storage_pool: default
 network_bridge: incusbr0
 
