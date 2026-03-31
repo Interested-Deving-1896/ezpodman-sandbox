@@ -7,15 +7,17 @@ for testing [ezpodman](https://github.com/alfonsosanchez12/ezpodman) — a lazyd
 
 ## Deploy everything
 
+`incus_remote` is required on every run — there is no default. Pass it explicitly:
+
 ```bash
-ansible-playbook playbooks/provision.yml && \
-ansible-playbook playbooks/setup.yml && \
-ansible-playbook playbooks/containers_up.yml
+ansible-playbook playbooks/provision.yml -e "incus_remote=badger" && \
+ansible-playbook playbooks/setup.yml -e "incus_remote=badger" && \
+ansible-playbook playbooks/containers_up.yml -e "incus_remote=badger"
 ```
 
-This runs against the `badger` Incus remote by default. When complete you have:
+When complete you have:
 
-- **ezpodman-local** (Fedora 43) — podman, lazydocker, ezpodman, full toolchain
+- **ezpodman-local** (Fedora 43) — podman, lazydocker, ezpodman, full toolchain, `podman.socket` enabled, `XDG_RUNTIME_DIR` / `DBUS_SESSION_BUS_ADDRESS` / `DOCKER_HOST` / `DOCKER_API_VERSION` set in `.bashrc`
 - **podman-remote** (Debian Trixie) — podman + `podman.socket` enabled
 - Containers running: nginx + caddy on ezpodman-local, nginx + postgres on podman-remote
 
@@ -41,18 +43,17 @@ incus project list badger:
 
 ### Target a different remote
 
-Any playbook accepts `-e "incus_remote=<name>"` at runtime:
+Pass `-e "incus_remote=<name>"` on every run. Available remotes: `badger`, `endurance`, `falcon`.
 
 ```bash
 ansible-playbook playbooks/provision.yml -e "incus_remote=falcon"
 ```
 
-Available remotes: `badger` (default), `endurance`, `falcon`.
-
 ### Change storage pool or network bridge
 
 ```bash
 ansible-playbook playbooks/provision.yml \
+  -e "incus_remote=badger" \
   -e "storage_pool=local" \
   -e "network_bridge=br0"
 ```
@@ -60,7 +61,7 @@ ansible-playbook playbooks/provision.yml \
 ### Dry run (check mode)
 
 ```bash
-ansible-playbook playbooks/provision.yml --check
+ansible-playbook playbooks/provision.yml -e "incus_remote=badger" --check
 ```
 
 Read-only tasks (list, query) still execute so the output is meaningful.
@@ -87,36 +88,45 @@ Each playbook is idempotent. Re-running it skips what already exists.
 ### Graceful (stops containers first)
 
 ```bash
-ansible-playbook playbooks/nuke.yml
+ansible-playbook playbooks/nuke.yml -e "incus_remote=badger"
 ```
 
 ### Force (skip container shutdown)
 
 ```bash
-ansible-playbook playbooks/nuke.yml --tags force
+ansible-playbook playbooks/nuke.yml -e "incus_remote=badger" --tags force
 ```
 
 ### Containers only (keep VMs)
 
 ```bash
-ansible-playbook playbooks/containers_down.yml
+ansible-playbook playbooks/containers_down.yml -e "incus_remote=badger"
 ```
 
 ---
 
 ## After provisioning (manual steps)
 
-Two steps are out of scope for Ansible and must be done once after `provision.yml`:
+Two steps are out of scope for Ansible and must be done once after `setup.yml`:
 
-1. **SSH key from ezpodman-local to podman-remote** — needed for ezpodman remote Podman over SSH:
-
-   ```bash
-   # From inside ezpodman-local as the podman user:
-   ssh-keygen -t ed25519
-   ssh-copy-id podman@podman-remote
-   ```
+1. **SSH key from ezpodman-local to podman-remote** — needed for ezpodman remote Podman over SSH.
+   `setup.yml` ensures sshd is running on `podman-remote` and sets a password for the `podman`
+   user (`podman` by default) so `ssh-copy-id` can authenticate. Run ezpodman and follow its
+   prompts to push the key; use that password when asked.
 
 2. **Step-CA root trust** — needed for HTTPS to homelab services (forgejo, etc.):
+
+3. **Ghostty terminal users only** — Fedora doesn't ship Ghostty's terminfo, so
+   TUI apps like lazydocker and ezpodman will fail with a cryptic error. Add this
+   to the `podman` user's `~/.bashrc` on `ezpodman-local`:
+
+   ```bash
+   echo 'export TERM="xterm-256color"' >> ~/.bashrc
+   source ~/.bashrc
+   ```
+
+   This only applies if your Mac terminal is Ghostty (or any terminal whose
+   `$TERM` value isn't in Fedora's terminfo database).
 
    ```bash
    # Run on each VM:
@@ -133,12 +143,26 @@ Two steps are out of scope for Ansible and must be done once after `provision.ym
 # Root shell
 incus shell --project ezpodman-sandbox badger:ezpodman-local
 
-# Shell as the podman user (rootless containers live here)
-incus shell --project ezpodman-sandbox badger:ezpodman-local
+# Switch to the podman user — use 'su -' (with the dash), not plain 'su'.
+# The dash starts a login shell, which sources ~/.bashrc where XDG_RUNTIME_DIR,
+# DBUS_SESSION_BUS_ADDRESS, DOCKER_HOST, and DOCKER_API_VERSION are set.
+# Plain 'su' inherits root's environment and none of those vars will be set.
 su - podman
 
-# Check running containers
-incus exec --project ezpodman-sandbox badger:ezpodman-local \
-  --user $(incus exec --project ezpodman-sandbox badger:ezpodman-local -- id -u podman) \
-  -- podman ps
+# Check running containers (as the podman user)
+podman ps
 ```
+
+### Installing packages
+
+Package installation must be done as **root**, not as the `podman` user.
+Rootless Podman controls containers — it has no elevated privileges on the host
+and cannot install system packages.
+
+```bash
+# From a root shell inside the VM:
+dnf install -y <package>    # Fedora (ezpodman-local)
+apt-get install -y <package> # Debian (podman-remote)
+```
+
+Once installed, the package is available system-wide and usable by the `podman` user.

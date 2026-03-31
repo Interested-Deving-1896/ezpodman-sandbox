@@ -8,3 +8,8 @@
 # Created by this role if it doesn't exist.
 # All containers, sockets, and toolchain binaries belong to this user.
 sandbox_user: podman
+
+# Password for sandbox_user on podman-remote.
+# Needed so ezpodman can run 'ssh-copy-id podman@podman-remote' to push its
+# SSH key — that's the feature being tested. This is a sandbox-only credential.
+sandbox_user_password: podman

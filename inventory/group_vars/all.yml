@@ -1,17 +1,18 @@
 ---
 # group_vars/all.yml — vars applied to every host, including localhost.
 #
-# 'incus_remote' is the single knob that selects which Incus server to use.
-# It must already be registered on your Mac:
-#   incus remote list          # check what's available
-#   incus remote add badger https://badger.home.lan:8443 --accept-certificate
+# 'incus_remote' selects which Incus server to target. It has no default —
+# you must pass it explicitly on every run:
 #
-# Override at runtime: ansible-playbook provision.yml -e "incus_remote=falcon"
+#   ansible-playbook playbooks/provision.yml -e "incus_remote=badger"
+#
+# See available remotes: incus remote list
+# Add a new remote:      incus remote add badger https://badger.home.lan:8443 --accept-certificate
 
-incus_remote: badger
 incus_project: ezpodman-sandbox
 
 # community.general.incus connection plugin reads these two variables.
-# We derive them from above so there's only one place to change the remote.
-ansible_incus_remote: "{{ incus_remote }}"
+# default('') prevents a cryptic Jinja2 parse error when incus_remote is
+# not set — the assert in each playbook will catch it with a clear message.
+ansible_incus_remote: "{{ incus_remote | default('') }}"
 ansible_incus_project: "{{ incus_project }}"

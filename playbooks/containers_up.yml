@@ -22,6 +22,18 @@
   vars_files:
     - "{{ playbook_dir }}/../roles/podman_setup/defaults/main.yml"
 
+  pre_tasks:
+    - name: Require incus_remote to be set explicitly
+      ansible.builtin.assert:
+        that:
+          - incus_remote is defined
+          - incus_remote | length > 0
+        fail_msg: |
+          'incus_remote' is not set. Pass it explicitly:
+            ansible-playbook playbooks/containers_up.yml -e "incus_remote=badger"
+          Available remotes: incus remote list
+      run_once: true
+
   roles:
     - role: test_containers
       vars:

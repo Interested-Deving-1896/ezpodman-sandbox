@@ -28,6 +28,17 @@
     - "{{ playbook_dir }}/../roles/podman_setup/defaults/main.yml"
 
   pre_tasks:
+    - name: Require incus_remote to be set explicitly
+      ansible.builtin.assert:
+        that:
+          - incus_remote is defined
+          - incus_remote | length > 0
+        fail_msg: |
+          'incus_remote' is not set. Pass it explicitly:
+            ansible-playbook playbooks/nuke.yml -e "incus_remote=badger"
+          Available remotes: incus remote list
+      run_once: true
+
     # Python may not be installed on a freshly provisioned VM — bootstrap it
     # with raw (which works without Python) before any other modules run.
     - name: Bootstrap Python3

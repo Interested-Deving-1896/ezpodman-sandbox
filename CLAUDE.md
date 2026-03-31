@@ -51,12 +51,12 @@ Default target remote: `badger`. Selectable at runtime via `-e "incus_remote=bad
 | Name            | Distro      | Role          | Software |
 |-----------------|-------------|---------------|----------|
 | ezpodman-local  | Fedora 43   | local / main  | curl, podman, docker, ezpodman, lazydocker, git, go, jq, fzf |
-| podman-remote   | Debian Trixie | remote/target | podman only |
+| podman-remote   | Debian Trixie | remote/target | podman, openssh-server |
 
 - VMs live on the internal Incus bridge — no direct LAN IPs
 - Ansible connects via `community.general.incus` connection plugin (no SSH needed)
 - Podman is **rootless** on both VMs, running as `sandbox_user` (default: `podman`)
-- `podman-remote` has the systemd user socket enabled (`podman.socket`)
+- Both VMs have `podman.socket` enabled — `ezpodman-local` needs it for local container management; `podman-remote` needs it for remote access over SSH
 - Remote podman connectivity `ezpodman-local` → `podman-remote` over SSH is the core feature being tested
 
 ### Test Containers
@@ -131,7 +131,9 @@ ezpodman-sandbox/
 
 Done once after provisioning:
 
-1. **SSH key `ezpodman-local` → `podman-remote`** — required for ezpodman remote podman over SSH
+1. **SSH key `ezpodman-local` → `podman-remote`** — required for ezpodman remote podman over SSH.
+   `setup.yml` installs sshd and sets a password for `sandbox_user` on `podman-remote`
+   (default: `podman`/`podman`) so ezpodman's `ssh-copy-id` step can authenticate.
 2. **Step-CA root trust** — run on each VM so HTTPS to homelab services works:
 
    ```bash
@@ -182,3 +184,13 @@ Check containers as this user: `incus exec badger:ezpodman-local --user <uid> --
 
 **ezpodman is fetched from GitHub**, not Forgejo, to avoid the Step-CA TLS prerequisite
 on fresh VMs.
+
+**`su - podman` inside `incus exec` does not trigger PAM**, so `XDG_RUNTIME_DIR`,
+`DBUS_SESSION_BUS_ADDRESS`, and `DOCKER_HOST` are never set by the system. `setup.yml`
+writes them explicitly to `sandbox_user`'s `~/.bashrc`. Always use `su -` (not `su`)
+so the login shell sources `.bashrc`.
+
+**Ghostty terminal users** — `TERM=xterm-ghostty` is propagated from the Mac into the VM
+via `incus exec`, but Fedora doesn't have Ghostty's terminfo. TUI apps (lazydocker, ezpodman)
+fail with a cryptic `exec.ExitError exit status 1`. Fix: add `export TERM="xterm-256color"`
+to the `podman` user's `~/.bashrc` on `ezpodman-local` (manual step — not automated by Ansible).

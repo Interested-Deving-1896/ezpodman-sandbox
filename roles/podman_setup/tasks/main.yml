@@ -28,6 +28,26 @@
     state: present
   when: ansible_facts['os_family'] == "Debian"
 
+# openssh-server is not included in the Debian Trixie minimal Incus image.
+# ezpodman connects from ezpodman-local to podman-remote over SSH to manage
+# containers remotely — sshd must be running for that to work.
+# Only needed on podman-remote (the [remote] group); ezpodman-local is the client.
+# Note: Debian names the service 'ssh', not 'sshd'.
+- name: Install openssh-server (podman-remote)
+  ansible.builtin.apt:
+    name: openssh-server
+    state: present
+  when:
+    - ansible_facts['os_family'] == "Debian"
+    - inventory_hostname in groups['remote']
+
+- name: Enable and start sshd (podman-remote)
+  ansible.builtin.systemd:
+    name: ssh
+    state: started
+    enabled: true
+  when: inventory_hostname in groups['remote']
+
 # ── 2. Create sandbox user ───────────────────────────────────────────────────
 
 # Rootless Podman requires a real (non-root) user with entries in
@@ -42,6 +62,11 @@
     # create_home ensures ~/.config and ~/.local are writable for user services
     create_home: true
     state: present
+    # Set a password on podman-remote so ezpodman can run 'ssh-copy-id' to
+    # push its SSH key — testing that flow is the point of the sandbox.
+    # password_hash('sha512') produces the /etc/shadow-compatible hash.
+    # Only set on podman-remote; ezpodman-local is the initiating side.
+    password: "{{ (sandbox_user_password | password_hash('sha512')) if inventory_hostname in groups['remote'] else omit }}"
   register: sandbox_user_info
 
 # ── 3. Enable lingering ──────────────────────────────────────────────────────
@@ -58,24 +83,30 @@
 # ── 4. Enable podman.socket (podman-remote only) ─────────────────────────────
 
 # podman.socket is the systemd user unit that activates the Podman REST API
-# on demand. ezpodman-local connects to it over SSH as:
-#   ssh podman@podman-remote podman system service
-# or by forwarding the socket path via CONTAINER_HOST.
+# on demand. It is needed on both VMs:
+#   - ezpodman-local: ezpodman checks for the local socket at startup
+#     (/run/user/<UID>/podman/podman.sock) and enables lazydocker locally.
+#   - podman-remote: ezpodman-local connects to this socket over an SSH tunnel
+#     to manage remote containers.
 #
-# This block only runs on hosts in the [remote] inventory group.
-# The XDG_RUNTIME_DIR env var tells systemd where to find the user's
-# runtime directory (where the socket lives). Its path is /run/user/<UID>.
+# XDG_RUNTIME_DIR tells systemd where the user's runtime directory is
+# (where the socket lives). Its path is /run/user/<UID>.
+# systemctl --user needs two env vars to communicate with the user's systemd:
+#   XDG_RUNTIME_DIR  — path to the user's runtime dir (/run/user/<UID>)
+#   DBUS_SESSION_BUS_ADDRESS — path to the user's D-Bus socket (also under XDG_RUNTIME_DIR)
+# Ansible's systemd module with scope:user doesn't set these automatically when
+# using become_user, so we fall back to the command module and set them explicitly.
+# Lingering (enabled above) ensures the user bus socket exists at boot even
+# without an active login session.
 - name: Enable and start podman.socket for '{{ sandbox_user }}'
-  ansible.builtin.systemd:
-    name: podman.socket
-    enabled: true
-    state: started
-    scope: user
+  ansible.builtin.command:
+    cmd: systemctl --user enable --now podman.socket
   become: true
   become_user: "{{ sandbox_user }}"
   environment:
     XDG_RUNTIME_DIR: "/run/user/{{ sandbox_user_info.uid }}"
-  when: inventory_hostname in groups['remote']
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ sandbox_user_info.uid }}/bus"
+  changed_when: false
 
 # ── 5. Smoke-test ────────────────────────────────────────────────────────────
 

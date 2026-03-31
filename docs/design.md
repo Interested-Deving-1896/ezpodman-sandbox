@@ -43,7 +43,7 @@ Incus server (badger.home.lan)
     │   ├── lazydocker, ezpodman, go, jq, fzf ...
     │   └── containers: nginx (:8080), caddy (:8081)
     └── podman-remote (Debian Trixie)
-        ├── podman (rootless) + podman.socket
+        ├── podman (rootless) + podman.socket + sshd
         └── containers: nginx (:8080), postgres (:5432)
 ```
 
@@ -171,8 +171,8 @@ ansible_connection=community.general.incus
 
 **Groups matter** because `group_vars/local.yml` is automatically applied to
 hosts in `[local]`, and `group_vars/remote.yml` to hosts in `[remote]`. This
-is how Ansible knows to enable `podman.socket` on `podman-remote` but not on
-`ezpodman-local` — the condition in `podman_setup` checks
+is how Ansible knows to install `openssh-server` and set the user password on
+`podman-remote` but not on `ezpodman-local` — the condition in `podman_setup` checks
 `inventory_hostname in groups['remote']`.
 
 `group_vars/all.yml` applies to every host, including `localhost`. That's how
@@ -200,7 +200,7 @@ incus exec badger:ezpodman-local --project ezpodman-sandbox -- /bin/sh -c "<task
 The plugin reads two variables to know which server and project to target:
 
 ```yaml
-ansible_incus_remote: badger          # named remote, already configured on Mac
+ansible_incus_remote: "{{ incus_remote }}"   # passed at runtime via -e "incus_remote=badger"
 ansible_incus_project: ezpodman-sandbox
 ```
 
@@ -241,8 +241,8 @@ touching any file.
 Variables scoped to a group of hosts. This is where host-specific config
 belongs:
 
-- `all.yml` — things every host needs (`incus_remote`, `incus_project`,
-  connection plugin vars)
+- `all.yml` — things every host needs (`incus_project`, connection plugin
+  vars). `incus_remote` has no default here — it must be passed at runtime.
 - `local.yml` — container definitions for `ezpodman-local`
 - `remote.yml` — container definitions for `podman-remote`
 
@@ -302,9 +302,15 @@ read-only tasks — it forces them to run even in dry-run mode.
 **What it does:**
 1. Installs Podman (uses `dnf` on Fedora, `apt` on Debian — detected via
    `ansible_facts['os_family']`)
-2. Creates the `podman` user
-3. Enables lingering for that user
-4. Enables `podman.socket` on `podman-remote` only
+2. Installs and starts `openssh-server` on `podman-remote` only — the Debian
+   Trixie minimal image does not ship it, and ezpodman needs sshd running to
+   connect from `ezpodman-local` over SSH
+3. Creates the `podman` user, with a password set on `podman-remote` only
+   (`sandbox_user_password`, default: `podman`) — required so ezpodman's
+   `ssh-copy-id` step can authenticate when pushing the SSH key
+4. Enables lingering for that user
+5. Enables `podman.socket` on both VMs — `ezpodman-local` needs it so ezpodman
+   can find the local socket; `podman-remote` needs it for remote SSH access
 
 **Why `gather_facts: false` + `pre_tasks` bootstrap:**
 The Fedora 43 minimal image ships without Python. Ansible needs Python on
@@ -466,7 +472,7 @@ This project handles `command` idempotency with a check-then-act pattern:
 ```yaml
 - name: List existing instances
   ansible.builtin.command:
-    cmd: "incus list badger: --project ezpodman-sandbox --format csv --columns n"
+    cmd: "incus list {{ incus_remote }}: --project ezpodman-sandbox --format csv --columns n"
   register: existing_instances   # store the output
   changed_when: false            # listing is never a change
 
@@ -505,8 +511,36 @@ This requires:
    socket.
 
 When Ansible runs tasks as the `podman` user (via `become: true` +
-`become_user: podman`), it must also set `XDG_RUNTIME_DIR` in the environment.
-Without it, the `podman` CLI can't find its own socket and will error.
+`become_user: podman`), it must also set `XDG_RUNTIME_DIR` and
+`DBUS_SESSION_BUS_ADDRESS` in the environment. Without them, `systemctl --user`
+and the Podman socket cannot be reached.
+
+**Why `.bashrc` instead of PAM:** `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS`
+are normally set by `pam_systemd` at login. But `su - podman` inside an
+`incus exec` session does not go through PAM, so they are never populated.
+`setup.yml` writes them explicitly to `~/.bashrc` so they are always available
+regardless of how the shell was started. The same applies to `DOCKER_HOST` and
+`DOCKER_API_VERSION=1.41` (needed for lazydocker to talk to Podman's
+Docker-compatible socket).
+
+Always use `su -` (with the dash), never plain `su` — the dash starts a login
+shell that sources `.bashrc`:
+
+```bash
+su - podman   # correct: sources ~/.bashrc, all env vars available
+su podman     # wrong: inherits root's environment, env vars not set
+```
+
+**`TERM` and TUI apps:** `incus exec` propagates `$TERM` from the host into the
+VM. If the host terminal is Ghostty (`TERM=xterm-ghostty`), TUI apps like
+lazydocker will fail because Fedora's terminfo database doesn't include Ghostty.
+Add `export TERM="xterm-256color"` to `~/.bashrc` manually on `ezpodman-local`
+if using Ghostty on the Mac.
+
+**Package installation must be done as root.** The `podman` user is unprivileged
+and cannot install system packages. Install via `dnf` or `apt` from a root
+shell — the package becomes available system-wide and usable by the `podman`
+user afterward.
 
 ---
 
@@ -543,12 +577,12 @@ halfway through):
 ```yaml
 - name: List VMs in project
   ansible.builtin.command:
-    cmd: "incus list badger: --project ezpodman-sandbox --format csv --columns n"
+    cmd: "incus list {{ incus_remote }}: --project ezpodman-sandbox --format csv --columns n"
   register: existing_vms
 
 - name: Delete VMs
   ansible.builtin.command:
-    cmd: "incus delete badger:{{ item }} --project ezpodman-sandbox --force"
+    cmd: "incus delete {{ incus_remote }}:{{ item }} --project ezpodman-sandbox --force"
   loop: "{{ existing_vms.stdout_lines }}"
 ```
 

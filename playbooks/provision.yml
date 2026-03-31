@@ -8,12 +8,9 @@
 # setup.yml, containers_up.yml, etc.). Here we use the incus CLI directly to
 # build the environment that those later playbooks will connect into.
 #
-# USAGE:
-#   ansible-playbook -i inventory/hosts.ini playbooks/provision.yml
-#
-#   # Target a different remote at runtime:
-#   ansible-playbook -i inventory/hosts.ini playbooks/provision.yml \
-#     -e "incus_remote=falcon"
+# USAGE (incus_remote is required — no default):
+#   ansible-playbook -i inventory/hosts.ini playbooks/provision.yml -e "incus_remote=badger"
+#   ansible-playbook -i inventory/hosts.ini playbooks/provision.yml -e "incus_remote=falcon"
 #
 # PREREQUISITES (done once, outside Ansible):
 #   1. incus CLI installed on your Mac
@@ -35,6 +32,17 @@
 - name: Provision ezpodman-sandbox Incus project and VMs
   hosts: localhost
   gather_facts: false   # we don't need Mac facts; skip the overhead
+
+  pre_tasks:
+    - name: Require incus_remote to be set explicitly
+      ansible.builtin.assert:
+        that:
+          - incus_remote is defined
+          - incus_remote | length > 0
+        fail_msg: |
+          'incus_remote' is not set. Pass it explicitly:
+            ansible-playbook playbooks/provision.yml -e "incus_remote=badger"
+          Available remotes: incus remote list
 
   roles:
     - role: incus_project

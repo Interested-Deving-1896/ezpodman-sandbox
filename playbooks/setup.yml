@@ -33,6 +33,17 @@
   gather_facts: false
 
   pre_tasks:
+    - name: Require incus_remote to be set explicitly
+      ansible.builtin.assert:
+        that:
+          - incus_remote is defined
+          - incus_remote | length > 0
+        fail_msg: |
+          'incus_remote' is not set. Pass it explicitly:
+            ansible-playbook playbooks/setup.yml -e "incus_remote=badger"
+          Available remotes: incus remote list
+      run_once: true   # one check is enough — no need to assert on every VM
+
     - name: Bootstrap Python3 (raw — works without Python on the remote)
       ansible.builtin.raw: |
         if command -v python3 >/dev/null 2>&1; then
@@ -148,6 +159,52 @@
         path: /home/{{ sandbox_user }}/.bashrc
         line: 'export PATH="$HOME/.local/bin:$PATH"'
         create: true
+        owner: "{{ sandbox_user }}"
+        group: "{{ sandbox_user }}"
+        mode: "0644"
+
+    # XDG_RUNTIME_DIR and DBUS_SESSION_BUS_ADDRESS are normally set by
+    # pam_systemd at login. But 'su - podman' inside an 'incus exec' session
+    # does not go through PAM, so they are never populated — causing
+    # 'systemctl --user' and the Podman socket to fail. Setting them explicitly
+    # in .bashrc ensures they are always available regardless of how the shell
+    # was started.
+    - name: Set XDG_RUNTIME_DIR in .bashrc for {{ sandbox_user }}
+      ansible.builtin.lineinfile:
+        path: /home/{{ sandbox_user }}/.bashrc
+        line: 'export XDG_RUNTIME_DIR="/run/user/$(id -u)"'
+        owner: "{{ sandbox_user }}"
+        group: "{{ sandbox_user }}"
+        mode: "0644"
+
+    - name: Set DBUS_SESSION_BUS_ADDRESS in .bashrc for {{ sandbox_user }}
+      ansible.builtin.lineinfile:
+        path: /home/{{ sandbox_user }}/.bashrc
+        line: 'export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"'
+        owner: "{{ sandbox_user }}"
+        group: "{{ sandbox_user }}"
+        mode: "0644"
+
+    # DOCKER_HOST tells lazydocker (and any Docker-compatible client) where to
+    # find the Podman socket. ezpodman sets this itself before launching
+    # lazydocker, but setting it in .bashrc means 'lazydocker' also works when
+    # invoked directly from the shell.
+    - name: Set DOCKER_HOST in .bashrc for {{ sandbox_user }}
+      ansible.builtin.lineinfile:
+        path: /home/{{ sandbox_user }}/.bashrc
+        line: 'export DOCKER_HOST="unix:///run/user/$(id -u)/podman/podman.sock"'
+        owner: "{{ sandbox_user }}"
+        group: "{{ sandbox_user }}"
+        mode: "0644"
+
+    # Podman's Docker-compatible API implements Docker API v1.41. Without this,
+    # lazydocker negotiates a newer version that Podman doesn't support and fails
+    # with a generic exit status 1. ezpodman sets this internally; we set it here
+    # so lazydocker also works when invoked directly.
+    - name: Set DOCKER_API_VERSION in .bashrc for {{ sandbox_user }}
+      ansible.builtin.lineinfile:
+        path: /home/{{ sandbox_user }}/.bashrc
+        line: 'export DOCKER_API_VERSION="1.41"'
         owner: "{{ sandbox_user }}"
         group: "{{ sandbox_user }}"
         mode: "0644"
