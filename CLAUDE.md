@@ -50,7 +50,7 @@ Default target remote: `badger`. Selectable at runtime via `-e "incus_remote=bad
 
 | Name            | Distro      | Role          | Software |
 |-----------------|-------------|---------------|----------|
-| ezpodman-local  | Fedora 43   | local / main  | curl, podman, docker, ezpodman, lazydocker, git, go, jq, fzf |
+| ezpodman-local  | Fedora 43   | local / main  | curl, podman, podman-remote, docker, ezpodman, lazydocker, git, go, jq, fzf |
 | podman-remote   | Debian Trixie | remote/target | podman, openssh-server |
 
 - VMs live on the internal Incus bridge — no direct LAN IPs

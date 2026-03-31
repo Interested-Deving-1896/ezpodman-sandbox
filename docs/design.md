@@ -39,7 +39,7 @@ Your Mac (control node)
 Incus server (badger.home.lan)
 └── project: ezpodman-sandbox
     ├── ezpodman-local (Fedora 43)
-    │   ├── podman (rootless)
+    │   ├── podman (rootless) + podman-remote
     │   ├── lazydocker, ezpodman, go, jq, fzf ...
     │   └── containers: nginx (:8080), caddy (:8081)
     └── podman-remote (Debian Trixie)

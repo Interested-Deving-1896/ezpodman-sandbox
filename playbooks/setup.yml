@@ -91,6 +91,10 @@
           # podman-docker provides a 'docker' CLI shim that redirects to Podman.
           # This lets tools that call 'docker' work without a Docker daemon.
           - podman-docker
+          # podman-remote provides the 'podman-remote' CLI for managing containers
+          # on remote hosts over SSH. ezpodman uses it to list and manage
+          # remote connections (podman-remote system connection list/add).
+          - podman-remote
         state: present
 
     # ── lazydocker ───────────────────────────────────────────────────────────

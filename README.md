@@ -17,7 +17,7 @@ ansible-playbook playbooks/containers_up.yml -e "incus_remote=badger"
 
 When complete you have:
 
-- **ezpodman-local** (Fedora 43) — podman, lazydocker, ezpodman, full toolchain, `podman.socket` enabled, `XDG_RUNTIME_DIR` / `DBUS_SESSION_BUS_ADDRESS` / `DOCKER_HOST` / `DOCKER_API_VERSION` set in `.bashrc`
+- **ezpodman-local** (Fedora 43) — podman, podman-remote, lazydocker, ezpodman, full toolchain, `podman.socket` enabled, `XDG_RUNTIME_DIR` / `DBUS_SESSION_BUS_ADDRESS` / `DOCKER_HOST` / `DOCKER_API_VERSION` set in `.bashrc`
 - **podman-remote** (Debian Trixie) — podman + `podman.socket` enabled
 - Containers running: nginx + caddy on ezpodman-local, nginx + postgres on podman-remote
 
