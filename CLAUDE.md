@@ -8,8 +8,8 @@ environment for testing `ezpodman` — a lazydocker wrapper for Podman.
 ## Operator Context
 
 - Learning Ansible; prefer clear, well-commented playbooks over clever abstractions
-- Control node: MacBook (Ansible runs locally)
-- Incus remote management already configured on Mac via TLS
+- Control node: Mac or Linux laptop/workstation (Ansible runs locally)
+- Incus remote management already configured on control node via TLS
 
 ---
 
@@ -17,7 +17,17 @@ environment for testing `ezpodman` — a lazydocker wrapper for Podman.
 
 | Repo | URL |
 |------|-----|
-| This project | `https://forgejo.home.lan/alfon/ezpodman-sandbox.git` |
+| This project (Forgejo, private) | `https://forgejo.home.lan/alfon/ezpodman-sandbox.git` |
+| Public mirror (GitHub) | `https://github.com/alfonsosanchez12/ezpodman-sandbox.git` |
+
+### Branch strategy
+
+| Branch | Remote   | Purpose |
+|--------|----------|---------|
+| `main` | Forgejo  | Primary development branch. Contains full project context including this CLAUDE.md with homelab-specific details. |
+| `public` | GitHub | Public mirror. Identical to `main` except CLAUDE.md is gitignored — homelab URLs, server names, and operator notes stay private. |
+
+When work is ready to share publicly: merge/rebase `public` onto `main`, then push `public` to GitHub.
 
 ### Installing ezpodman (used by setup.yml)
 
@@ -29,7 +39,7 @@ chmod +x ~/.local/bin/ezpodman
 
 ---
 
-## Incus Remotes (configured on Mac)
+## Incus Remotes (configured on control node)
 
 | Remote   | Address                         |
 |----------|---------------------------------|
@@ -81,7 +91,7 @@ ansible_incus_project=ezpodman-sandbox
 `incus_remote` defaults to `badger` in `group_vars/all.yml`.
 
 `provision.yml` and `nuke.yml` run against `localhost` and use the `incus` CLI
-directly (named remotes are already configured on the Mac). All other playbooks
+directly (named remotes are already configured on the control node). All other playbooks
 use the connection plugin to exec into VMs.
 
 ---
@@ -190,7 +200,7 @@ on fresh VMs.
 writes them explicitly to `sandbox_user`'s `~/.bashrc`. Always use `su -` (not `su`)
 so the login shell sources `.bashrc`.
 
-**Ghostty terminal users** — `TERM=xterm-ghostty` is propagated from the Mac into the VM
+**Ghostty terminal users** — `TERM=xterm-ghostty` is propagated from the control node into the VM
 via `incus exec`, but Fedora doesn't have Ghostty's terminfo. TUI apps (lazydocker, ezpodman)
 fail with a cryptic `exec.ExitError exit status 1`. Fix: add `export TERM="xterm-256color"`
 to the `podman` user's `~/.bashrc` on `ezpodman-local` (manual step — not automated by Ansible).

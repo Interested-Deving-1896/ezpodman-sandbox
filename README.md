@@ -125,7 +125,7 @@ Two steps are out of scope for Ansible and must be done once after `setup.yml`:
    source ~/.bashrc
    ```
 
-   This only applies if your Mac terminal is Ghostty (or any terminal whose
+   This only applies if your terminal is Ghostty (or any terminal whose
    `$TERM` value isn't in Fedora's terminfo database).
 
    ```bash

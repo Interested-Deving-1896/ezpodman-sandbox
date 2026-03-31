@@ -26,10 +26,10 @@ prior Ansible knowledge.
 
 The sandbox spins up two virtual machines inside an Incus project on a remote
 homelab server, installs software on them, and starts test containers — all
-with a single series of `ansible-playbook` commands from your Mac.
+with a single series of `ansible-playbook` commands from your control node (Mac or Linux).
 
 ```
-Your Mac (control node)
+Your control node (Mac or Linux)
 │
 │  ansible-playbook provision.yml   ← talks to Incus API via incus CLI
 │  ansible-playbook setup.yml       ← execs into VMs via incus connection plugin
@@ -86,8 +86,8 @@ automatically — no `-i` flags needed.
 
 ### Control node vs managed nodes
 
-- **Control node** — your Mac. Ansible runs here. Nothing is installed on it
-  except Ansible and the `incus` CLI.
+- **Control node** — your Mac or Linux machine. Ansible runs here. Nothing is
+  installed on it except Ansible and the `incus` CLI.
 - **Managed nodes** — the VMs (`ezpodman-local`, `podman-remote`). Ansible
   reaches them and runs tasks on them.
 
@@ -187,7 +187,7 @@ By default, Ansible connects to managed nodes over SSH. This project uses a
 different connection plugin: `community.general.incus`.
 
 **Why:** The VMs live on the internal Incus bridge — they have no LAN IP and
-are not reachable by SSH from your Mac. The `incus` connection plugin bypasses
+are not reachable by SSH from your control node. The `incus` connection plugin bypasses
 the network entirely by using `incus exec`, which is roughly equivalent to
 `docker exec` — it runs commands inside the VM via the hypervisor.
 
@@ -268,7 +268,7 @@ ansible-playbook provision.yml -e "incus_remote=falcon"
 **Used by:** `provision.yml`
 
 **What it does:**
-1. Verifies the named remote (`badger`) is configured on your Mac
+1. Verifies the named remote (`badger`) is configured on your control node
 2. Creates the `ezpodman-sandbox` Incus project if it doesn't exist
 3. Launches both VMs if they don't exist
 4. Waits until both VMs respond to `incus exec`
@@ -405,7 +405,7 @@ different machines.
 
 ### `provision.yml` — localhost only
 
-Runs entirely on your Mac. Uses the `incus_project` role to talk to the Incus
+Runs entirely on your control node. Uses the `incus_project` role to talk to the Incus
 API via CLI. No connection plugin involved — the VMs don't exist yet.
 
 ### `setup.yml` — two-play structure
@@ -535,7 +535,7 @@ su podman     # wrong: inherits root's environment, env vars not set
 VM. If the host terminal is Ghostty (`TERM=xterm-ghostty`), TUI apps like
 lazydocker will fail because Fedora's terminfo database doesn't include Ghostty.
 Add `export TERM="xterm-256color"` to `~/.bashrc` manually on `ezpodman-local`
-if using Ghostty on the Mac.
+if using Ghostty on the control node.
 
 **Package installation must be done as root.** The `podman` user is unprivileged
 and cannot install system packages. Install via `dnf` or `apt` from a root
